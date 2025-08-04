@@ -1,26 +1,23 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
+from joblib import load
 
-# --- Mock Prediction Function ---
+# --- Load Models ---
+@st.cache_resource
+def load_model(path):
+    return load(path)
+
+gender_model = load_model('gender_model.joblib') 
+age_model = load_model('age_model.joblib')
+
+# --- Prediction ---
 def predict_image(image):
-    """Replace this with your actual model logic if needed"""
-    # Dummy "model" - returns random results
-    gender = "Female" if np.random.rand() > 0.5 else "Male"
-    age = int(np.random.uniform(18, 80))
+    img_array = np.array(image.resize((64, 64))).flatten()  # Adjust shape as needed
+    
+    gender = "Female" if gender_model.predict([img_array])[0] == 1 else "Male"
+    age = int(age_model.predict([img_array])[0])
+    
     return gender, age
 
-# --- Streamlit UI ---
-st.title("👨‍🦱👩‍🦰 Age and Gender Prediction (Demo)")
-st.warning("⚠️ Using mock predictions - add your real model later")
-
-uploaded_file = st.file_uploader("Upload a face image...", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
-    image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, use_column_width=True)
-    
-    if st.button('Predict'):
-        gender, age = predict_image(image)
-        st.success(f"Gender: **{gender}** | Age: **{age} years**")
-        st.info("Tip: To add real predictions, convert your models to ONNX/Joblib")
+# (Keep the same Streamlit UI code from your working version)
