@@ -1,54 +1,46 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-import torch
-import torch.nn as nn
-from torchvision import transforms
+import onnxruntime as ort
 
-# --- PyTorch Model Loading ---
-def load_pytorch_model(model_path):
-    # Load model architecture and weights
-    model = torch.load(model_path, map_location=torch.device('cpu'))
-    model.eval()  # Set to evaluation mode
-    return model
+# --- Load ONNX Models ---
+@st.cache_resource
+def load_onnx_model(model_path):
+    return ort.InferenceSession(model_path)
 
-# Load models (replace with your actual PyTorch models)
-gender_model = load_pytorch_model('gender_model.pth')
-age_model = load_pytorch_model('age_model.pth')
+gender_model = load_onnx_model('gender_model.onnx')  # Converted from .h5
+age_model = load_onnx_model('age_model.onnx')       # Converted from .h5
 
 # --- Image Preprocessing ---
-transform = transforms.Compose([
-    transforms.Resize((64, 64)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
+def preprocess_image(image):
+    img = image.resize((64, 64))
+    img_array = np.array(img).astype(np.float32) / 255.0
+    img_array = np.transpose(img_array, (2, 0, 1))  # HWC to CHW
+    return np.expand_dims(img_array, axis=0)        # Add batch dimension
 
 def predict_image(image):
-    # Preprocess image
-    img_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+    input_data = preprocess_image(image)
     
-    # Gender prediction (assuming binary classification)
-    with torch.no_grad():
-        gender_output = gender_model(img_tensor)
-        gender = "Female" if torch.argmax(gender_output).item() == 1 else "Male"
-        
-        # Age prediction (assuming regression)
-        age_output = age_model(img_tensor)
-        age = int(age_output.item())
+    # Gender prediction
+    gender_input = {gender_model.get_inputs()[0].name: input_data}
+    gender_pred = gender_model.run(None, gender_input)[0]
+    gender = "Female" if np.argmax(gender_pred) == 1 else "Male"
+    
+    # Age prediction
+    age_input = {age_model.get_inputs()[0].name: input_data}
+    age_pred = age_model.run(None, age_input)[0][0][0]
+    age = int(age_pred)
     
     return gender, age
 
 # --- Streamlit UI ---
-st.title("👨‍🦱👩‍🦰 Age and Gender Prediction App (PyTorch)")
-st.write("Upload a face photo and get predicted age and gender instantly!")
+st.title("👨‍🦱👩‍🦰 Age and Gender Prediction (ONNX)")
+uploaded_file = st.file_uploader("Upload a face image...", type=["jpg", "jpeg", "png"])
 
-uploaded_file = st.file_uploader("Choose a face image...", type=["jpg", "jpeg", "png"])
-
-if uploaded_file is not None:
+if uploaded_file:
     image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption='Uploaded Image', use_column_width=True)
-
+    st.image(image, use_column_width=True)
+    
     if st.button('Predict'):
         gender, age = predict_image(image)
-        st.success(f"Predicted Gender: **{gender}**")
-        st.success(f"Predicted Age: **{age} years**")
+        st.success(f"Gender: **{gender}** | Age: **{age} years**")
