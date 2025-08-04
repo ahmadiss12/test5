@@ -1,5 +1,5 @@
-streamlit
-torch
-torchvision
-pillow
-numpy
+Pillow>=9.0.0
+streamlit>=1.32.0
+numpy>=1.24.0
+torch>=2.0.0  # PyTorch replacement
+torchvision>=0.15.0  # For image transforms
